@@ -1,331 +1,201 @@
-# LRAF Matching System - Complete Setup & Usage Guide
+# Navy LRAF Matching System - TSV Data Guide
 
-## 📁 Project Structure
+## 🎯 Overview
 
-First, organize your files in this structure:
+This enhanced LRAF system processes TSV (Tab-Separated Values) data from Navy procurement forecasts and matches them with contractor capabilities. Key improvements:
+
+- **TSV Support**: Handles tab-separated files from Navy systems
+- **Dual-Source Contractor Data**: Combines profile + capabilities files
+- **User Input**: Customize NAICS codes and target agencies
+- **Navy-Specific**: Properly maps all Navy procurement fields
+
+## 📁 Required File Structure
 
 ```
-lraf-matching/
-│
-├── code/
-│   ├── contractor_ingestion.py    # Contractor data ingestion module
-│   ├── matching_engine.py         # Core matching algorithm
-│   └── lraf_pipeline.py          # Main integration script
-│
+your_project/
+├── cip.py                 # Contractor ingestion (TSV compatible)
+├── me.py                  # Matching engine (4-factor scoring)
+├── lraf-pi.py            # Main pipeline (Navy-specific)
+├── run_navy_lraf.py      # Execution script
 ├── data/
-│   ├── contractors/               # Contractor data files
-│   │   ├── contractor_profile.csv
-│   │   └── past_performance.csv
-│   │
-│   └── forecasts/                # Opportunity/forecast files
-│       └── opportunities.csv
-│
-├── lraf_output/                  # Generated results (auto-created)
-│   ├── matching_summary.csv
-│   ├── capture_plans_tier_a.csv
-│   └── [contractor_name]_matches.csv
-│
-└── README.md                     # This file
+│   ├── contractors/
+│   │   ├── navancio_contractor_profile.tsv
+│   │   └── navancio_capabilities_final.tsv
+│   └── forecasts/
+│       └── navy_procurement_consolidated.tsv
+└── lraf_output/          # Results directory (created automatically)
 ```
 
-## 🚀 Step-by-Step Setup Instructions
+## 🚀 Quick Start
 
-### Step 1: Install Python Dependencies
-
-Open a terminal/command prompt and run:
-
+### 1. Install Requirements
 ```bash
-# Navigate to your project directory
-cd lraf-matching
-
-# Install required packages
 pip install pandas numpy
 ```
 
-### Step 2: Set Up Your File Structure
+### 2. Place Your Files
+Ensure all 4 Python files are in your project directory and TSV data files are in the correct subdirectories.
 
+### 3. Run the System
 ```bash
-# Create the directory structure
-mkdir -p code data/contractors data/forecasts lraf_output
-
-# Move your Python files to the code directory
-# Move this README to the root directory
+python run_navy_lraf.py
 ```
 
-### Step 3: Prepare Your Data Files
+### 4. Provide User Inputs
+When prompted:
+- **NAICS Codes**: Enter up to 5 primary NAICS codes (e.g., "541512, 541511, 518210")
+- **Target Agency**: Press Enter for "Navy" or specify another agency
 
-#### A. Contractor Profile CSV (`data/contractors/contractor_profile.csv`)
+## 📊 Data File Requirements
 
-Your contractor CSV must have these columns (order doesn't matter):
+### Contractor Profile TSV (`navancio_contractor_profile.tsv`)
+Required columns:
+- `legal_name` - Company legal name
+- `uei` - Unique Entity Identifier
+- `capability_summary` - Core capability statement
+- `capability_keywords` - Searchable keywords (optional)
+- `naics` - NAICS codes (semicolon-separated)
+- `pscs` - PSC codes (semicolon-separated)
+- `sb_flags` - Small business certifications (JSON format)
+- `facility_clearance` - Security clearance level
+- `target_agencies` - Preferred agencies (optional)
 
+### Capabilities TSV (`navancio_capabilities_final.tsv`)
+Enhances contractor profile with:
+- `background_summary` - Detailed background per service area
+- `expertise_areas` - Specific expertise descriptions
+- `key_capabilities` - Detailed capability statements
+- `service_area` - Service category
+
+### Navy Procurement TSV (`navy_procurement_consolidated.tsv`)
+Standard Navy columns (automatically mapped):
+- `record_id` - Unique opportunity ID
+- `Requirement Title` - Opportunity title
+- `Requirement Description` - Detailed description
+- `Associated Program or Requirement Office` - Agency/office
+- `Anticipated NAICS Code` - Industry code
+- `Anticipated PSC` - Product/service code
+- `Anticipated Procurement Method` - Set-aside type
+- `Anticipated Personnel Clearance` - Required clearance
+- `value_min_millions` / `value_max_millions` - Value range
+- `Anticipated Solicitation FY/Quarter` - RFP timing
+- And 30+ other fields...
+
+## 🎯 Scoring System
+
+### 4-Factor Model (Simplified for Speed)
+1. **Capability Text Match (60%)** - How well contractor capabilities match opportunity description
+2. **NAICS Alignment (25%)** - Industry code matching (exact, 4-digit, or 3-digit)
+3. **PSC Match (10%)** - Product/Service Code alignment
+4. **Certifications (5%)** - Set-aside eligibility
+
+### Performance Gates
+- **Set-Aside Gate**: Wrong certification → Cap at 50%
+- **Clearance Gate**: Insufficient clearance → Cap at 30%
+
+### Tier Classifications
+- **Tier A (≥70%)**: Strong match - pursue immediately
+- **Tier B (50-69%)**: Good match - worth monitoring
+- **Tier C (35-49%)**: Possible with teaming
+- **Ignore (<35%)**: Not worth pursuing
+
+## 📈 Output Files
+
+The system generates three key files in `lraf_output/`:
+
+### 1. `matching_summary.csv`
+Overview of all contractors:
 ```csv
-legal_name,dba,uei,cage,website,bd_lead_name,bd_lead_email,bd_lead_phone,sb_flags,capability_summary,capability_keywords,naics,pscs,vehicles,vehicle_role,facility_clearance,cleared_headcount,avg_annual_receipts_3yr,avg_employees_12mo,places_of_performance,internal_bid_cycle_days,target_agencies,min_deal_value
+contractor_name,tier_a_count,tier_b_count,tier_c_count,total_qualified
+NAVANCIO LLC,145,287,412,432
 ```
 
-**Example row:**
+### 2. `tier_a_opportunities.csv`
+High-priority opportunities to pursue:
 ```csv
-Acme GovTech LLC,,ABCDEF123XYZ,1A2B3,https://acmegov.com,Jane Doe,jane@acmegov.com,555-123-4567,"{""8a"":true,""HUBZone"":true}","Cloud migration and DevSecOps for DoD and civilian agencies with focus on zero trust architecture","cloud migration;zero trust;devsecops;kubernetes;aws","541512;541513","D399;R499","GSA MAS;8(a) STARS III","{""GSA MAS"":""prime"",""8(a) STARS III"":""sub""}",Secret,8,12500000,42,"[{""city"":""San Antonio"",""state"":""TX"",""remote_ok"":true}]",45,"Department of Defense;Department of Interior",250000
+contractor,opportunity,agency,score,capability_match,naics_match,rfp_fy,value_min_millions
+NAVANCIO LLC,Cloud Migration Services,NAVSEA,0.875,0.82,1.0,2026,5.5
 ```
 
-#### B. Past Performance CSV (`data/contractors/past_performance.csv`)
-
+### 3. `[contractor]_matches.csv`
+Detailed scoring for each contractor:
 ```csv
-title,agency_parent,agency_bureau,naics,psc,role,vehicle,contract_type,obligated_value,pop_start,pop_end,piid,short_description
+opportunity_id,title,score,tier,capability_match,naics_match,reasons,incumbent
 ```
 
-**Example row:**
-```csv
-IT Operations Support,Department of the Air Force,AFMC,541513,D399,prime,GSA MAS,FFP,2750000,2022-05-01,2025-04-30,FA1234-22-F-5678,"24/7 NOC support with 98.9% uptime SLA"
-```
+## 🔧 Customization
 
-#### C. Opportunities/Forecast CSV (`data/forecasts/opportunities.csv`)
-
-Your standardized forecast file must have these columns:
-
-```csv
-source,source_url,agency,bureau,office,title,description,keywords,naics,pscs,set_aside,vehicle,contract_type,est_value_min,est_value_max,place_city,place_state,remote_ok,pop_est_start,rfi_date,draft_rfp_date,final_rfp_date,required_clearance,co_name,co_email,co_phone
-```
-
-**Example row:**
-```csv
-SAM.gov,https://sam.gov/opp/123,Department of Defense,Air Force,AFMC,Cloud Migration Services,"Seeking cloud migration and DevSecOps support for mission critical systems","cloud;migration;devsecops;aws",541512,D399,8(a),GSA MAS,FFP,2000000,3000000,Austin,TX,false,2025-06-01,2025-02-15,2025-03-15,2025-04-15,Secret,John Smith,john.smith@af.mil,555-987-6543
-```
-
-### Step 4: Data Preparation Tips
-
-#### Formatting Requirements:
-
-- **UEI**: Exactly 12 characters (e.g., `ABCDEF123XYZ`)
-- **CAGE**: Exactly 5 characters (e.g., `1A2B3`)
-- **NAICS**: 6-digit codes separated by semicolons (e.g., `541511;541512`)
-- **PSCs**: 4-character codes separated by semicolons (e.g., `D399;R499`)
-- **JSON fields**: Use double quotes for JSON (e.g., `{"8a":true}`)
-- **Arrays**: Use semicolons to separate items in text fields
-- **Dates**: Use YYYY-MM-DD format
-
-## 💻 How to Use the Tool
-
-### Basic Usage
-
-1. **Navigate to your project directory:**
-```bash
-cd lraf-matching/code
-```
-
-2. **Run the main pipeline:**
-```bash
-python lraf_pipeline.py
-```
-
-The tool will automatically:
-- Load contractors from `data/contractors/contractor_profile.csv`
-- Load past performance from `data/contractors/past_performance.csv`
-- Load opportunities from `data/forecasts/opportunities.csv`
-- Run matching algorithm for each contractor
-- Generate results in `lraf_output/` directory
-
-### What Happens When You Run It
-
-```
-🚀 Starting LRAF Pipeline
-------------------------------------------------------------
-
-📥 Loading Contractor Data...
-✓ Loaded 15 contractors
-✓ Loaded past performance data
-
-📥 Loading Opportunity Data...
-✓ Loaded 250 opportunities
-
-🔄 Running matching for 15 contractors...
-  Acme GovTech LLC: A:12 B:28 C:35
-  TechCorp Federal: A:8 B:22 C:41
-  [... continues for each contractor ...]
-
-📤 Exporting Results...
-✓ Exported summary to lraf_output/matching_summary.csv
-✓ Exported individual match files to lraf_output/
-✓ Exported 47 Tier A capture plans
-
-============================================================
-LRAF MATCHING EXECUTIVE SUMMARY
-============================================================
-
-📊 Overall Statistics:
-  • Contractors Processed: 15
-  • Opportunities Analyzed: 250
-  • Total Qualified Matches: 285
-    - Tier A (Pursue Now): 87
-    - Tier B (Monitor): 198
-
-🎯 Top Performers:
-  • Acme GovTech LLC:
-    - Tier A: 12, Tier B: 28
-    - Top Agencies: DoD, VA, DHS
-  [... top 3 contractors ...]
-
-✅ LRAF Pipeline Complete!
-```
-
-## 📊 Understanding the Output
-
-### 1. **matching_summary.csv**
-High-level overview of all contractors:
-- `contractor_name`: Company name
-- `tier_a_count`: Number of "Pursue Now" opportunities
-- `tier_b_count`: Number of "Monitor" opportunities  
-- `total_qualified`: Sum of Tier A and B
-- `top_agencies`: Agencies with most matches
-
-### 2. **[contractor_name]_matches.csv**
-Detailed matches for each contractor including:
-- `title`: Opportunity title
-- `agency`: Issuing agency
-- `score`: Match score (0.000-1.000)
-- `tier`: A (≥0.75), B (0.55-0.74), C (0.40-0.54)
-- `naics_score`, `text_score`, `agency_score`: Component scores
-- `top_reason`: Best matching factor
-- `top_blocker`: Main limitation
-- `teaming_needed`: Partnership recommendations
-- `rfp_date`: Key deadline
-
-### 3. **capture_plans_tier_a.csv**
-Action plans for highest-priority opportunities:
-- Pre-populated capture strategy
-- Strengths and gaps analysis
-- Teaming recommendations
-- Next action items
-
-## 🎯 Matching Score Interpretation
-
-### Tier Definitions
-- **Tier A (≥0.75)**: Strong match, pursue immediately
-- **Tier B (0.55-0.74)**: Good match, monitor and prepare
-- **Tier C (0.40-0.54)**: Potential match, consider teaming
-- **Below 0.40**: Poor match, typically ignore
-
-### Score Components (Weights)
-- **Text Similarity (28%)**: Capability statement vs. opportunity description
-- **NAICS Match (20%)**: Industry code alignment
-- **Agency Affinity (16%)**: Past performance with agency
-- **PSC Match (8%)**: Product/service code alignment
-- **Timing Readiness (8%)**: Days until RFP vs. prep time
-- **Value Fit (6%)**: Contract size vs. past performance
-- **Role/Vehicle (6%)**: Prime/sub experience on vehicle
-- **Geography (4%)**: Location feasibility
-- **Certifications (4%)**: Required cert alignment
-
-### Gates (Score Caps)
-Certain mismatches cap the maximum possible score:
-- Missing required vehicle: Cap at 0.60
-- Missing set-aside certification: Cap at 0.50
-- Insufficient clearance: Cap at 0.50
-- Exceeds size standard: Cap at 0.70
-
-## 🔧 Customization Options
-
-### Adjust Matching Weights
-
-Edit `matching_engine.py` line 15-25:
+### Adjust Scoring Weights
+Edit `me.py` line 15:
 ```python
 self.weights = {
-    'text': 0.28,        # Increase if capability statements are strong
-    'naics': 0.20,       # Increase for NAICS-focused matching
-    'agency': 0.16,      # Increase if past performance is key
-    # ... adjust as needed (must sum to 1.0)
+    'capability_text': 0.60,  # Increase for text-heavy matching
+    'naics': 0.25,           # Increase for strict NAICS alignment
+    'psc': 0.10,             
+    'certifications': 0.05   
 }
 ```
 
 ### Change Tier Thresholds
-
-Edit `matching_engine.py` line 28-32:
+Edit `me.py` line 22:
 ```python
 self.tier_thresholds = {
-    'A': 0.75,   # Lower to get more Tier A matches
-    'B': 0.55,   # Adjust middle tier range
-    'C': 0.40    # Lower bound for consideration
+    'A': 0.70,  # Lower to get more Tier A matches
+    'B': 0.50,
+    'C': 0.35
 }
 ```
 
-### Modify Output Count
-
-Edit `lraf_pipeline.py` line 234:
+### Filter by Value Range
+Add to `lraf-pi.py` after loading opportunities:
 ```python
-# Change from top 50 to top 100 matches per contractor
-pipeline.run_matching(top_k=100)
+# Filter to opportunities over $5M
+self.opportunities = [o for o in self.opportunities 
+                     if o.get('est_value_min', 0) >= 5.0]
 ```
 
 ## 🐛 Troubleshooting
 
-### Common Issues and Solutions
+### "No opportunities loaded"
+- Check TSV file uses tabs, not commas
+- Verify column names match Navy format
+- Ensure file path is correct
 
-**"No contractors loaded"**
-- Check CSV file path: `data/contractors/contractor_profile.csv`
-- Verify CSV has headers matching the template
-- Ensure UEI is 12 characters, CAGE is 5 characters
+### Low match scores
+- Enhance contractor capability statements with more technical keywords
+- Add relevant NAICS codes when prompted
+- Check that PSC codes are properly formatted (uppercase)
 
-**"Invalid JSON in sb_flags"**
-- Use double quotes in JSON: `{"8a":true}` not `{'8a':true}`
-- Check for proper comma separation
+### Memory issues with large files
+- Process in batches by filtering `Source_Organization`
+- Limit to specific fiscal years
+- Reduce `top_k` parameter in matching
 
-**Low match scores for all opportunities**
-- Verify capability_summary has rich keywords
-- Check NAICS codes match between contractors and opportunities
-- Ensure past_performance.csv is loaded if relying on agency affinity
+## 📝 Navy-Specific Features
 
-**Missing output files**
-- Check write permissions for `lraf_output/` directory
-- Ensure no file locks from Excel or other programs
+1. **Multi-Agency Support**: Filters by `Source_Organization` and `Associated Program or Requirement Office`
+2. **Value Parsing**: Handles Navy's complex value fields (min/max/anticipated)
+3. **Timeline Tracking**: Captures FY and Quarter for solicitation and award
+4. **Incumbent Analysis**: Tracks current contractors for competitive intel
+5. **UIC Mapping**: Preserves Contracting Office UICs for POC identification
 
-## 📝 Adding New Data
+## 💡 Best Practices
 
-### To Add More Contractors
-1. Append rows to `data/contractors/contractor_profile.csv`
-2. Add corresponding past performance to `past_performance.csv`
-3. Re-run the pipeline
+1. **Enhance Capabilities**: Combine all capability documents into comprehensive statements
+2. **NAICS Strategy**: Enter broad NAICS codes that cover multiple service areas
+3. **Regular Updates**: Re-run weekly as Navy updates procurement forecasts
+4. **Tier A Focus**: Concentrate BD efforts on Tier A matches only
+5. **Incumbent Intel**: Check incumbent field for recompete opportunities
 
-### To Update Opportunities
-1. Replace or append to `data/forecasts/opportunities.csv`
-2. Re-run the pipeline for fresh matching
+## 🚦 Quick Wins
 
-### To Process Multiple Forecast Files
-Modify `lraf_pipeline.py` to load multiple files:
-```python
-# Around line 125, add:
-pipeline.load_opportunities_from_csv('data/forecasts/forecast_file1.csv')
-pipeline.load_opportunities_from_csv('data/forecasts/forecast_file2.csv')
-```
-
-## 🚦 Quick Start Checklist
-
-- [ ] Python 3.7+ installed
-- [ ] Created directory structure
-- [ ] Placed Python files in `code/` directory
-- [ ] Prepared contractor CSV with required columns
-- [ ] Prepared opportunities CSV with required columns
-- [ ] All UEIs are 12 characters
-- [ ] All NAICS codes are 6 digits
-- [ ] JSON fields use double quotes
-- [ ] Dates in YYYY-MM-DD format
-- [ ] Run `python lraf_pipeline.py` from `code/` directory
-- [ ] Check `lraf_output/` for results
-
-## 📧 Support Information
-
-For issues or questions:
-1. Check data formatting matches templates exactly
-2. Verify all required columns are present
-3. Review console output for specific error messages
-4. Ensure Python dependencies are installed
-
-## 🎯 Next Steps After Initial Run
-
-1. **Review Tier A matches** in `capture_plans_tier_a.csv`
-2. **Validate scores** with your BD team
-3. **Adjust weights** based on domain expertise
-4. **Schedule regular runs** (weekly/bi-weekly) with fresh forecasts
-5. **Track win rates** to refine scoring algorithm
+For immediate high-value matches:
+1. Enter IT-related NAICS codes: 541511, 541512, 541519
+2. Target "TBD" set-asides (open competition)
+3. Focus on Q1/Q2 FY26 opportunities (nearest term)
+4. Look for "Follow-on" opportunities with no incumbent
 
 ---
 
-*Version 1.0 - LRAF Matching System*
+**Version 2.0** - Navy TSV Edition
+Last Updated: August 2025
